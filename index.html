@@ -12,13 +12,13 @@
     <meta name="apple-mobile-web-app-title" content="Инфа под рукой">
     <meta name="mobile-web-app-capable" content="yes">
     
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=2.4.1">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=2.4.1">
-    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=2.4.1">
-    <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png?v=2.4.1">
-    <link rel="icon" type="image/png" sizes="512x512" href="android-chrome-512x512.png?v=2.4.1">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=2.4.2">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=2.4.2">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=2.4.2">
+    <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png?v=2.4.2">
+    <link rel="icon" type="image/png" sizes="512x512" href="android-chrome-512x512.png?v=2.4.2">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/2.4.2/crypto-js.min.js"></script>
     
     <style>
         * {
@@ -350,7 +350,7 @@
             transform: translate(-50%, -50%);
             width: 180px;
             height: 180px;
-            background-image: url('logo.png?v=2.4.1');
+            background-image: url('logo.png?v=2.4.2');
             background-size: contain;
             background-repeat: no-repeat;
             background-position: center;
@@ -896,7 +896,7 @@
     <div id="notification" class="notification hidden"></div>
 
     <script>
-        const APP_VERSION = '2.4.1';
+        const APP_VERSION = '2.4.2';
         
         const ACCESS_LEVELS = {
             '83e19a9ce479dc064bab4bd50134db14918cc967debd3ad223bb8993c523788d': {
@@ -2107,44 +2107,52 @@
         });
     </script>
 
-    <script>
-        (function() {
-            if ('serviceWorker' in navigator && location.protocol === 'https:') {
-                window.addEventListener('load', function() {
-    
-                    const path = window.location.pathname;
-                    const basePath = path.substring(0, path.lastIndexOf('/') + 1);
-                    const swPath = basePath + 'sw.js';
-                    
-                    console.log('Регистрация SW по пути:', swPath);
-                    console.log('Базовый путь:', basePath);
-                    
-                    const swUrl = swPath + '?v=' + Date.now();
-                    
-                    navigator.serviceWorker.register(swUrl)
-                        .then(function(reg) {
-                            console.log('✅ Service Worker зарегистрирован:', reg);
-                            
-                            reg.addEventListener('updatefound', () => {
-                                const newWorker = reg.installing;
-                                console.log('🔄 Найдено обновление SW');
-                                newWorker.addEventListener('statechange', () => {
-                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                        console.log('✅ Новая версия SW установлена');
+<script>
+    (function() {
+        if ('serviceWorker' in navigator && location.protocol === 'https:') {
+            window.addEventListener('load', function() {
+               
+                const path = window.location.pathname;
+                const basePath = path.substring(0, path.lastIndexOf('/') + 1);
+                const swPath = basePath + 'sw.js';
                 
+                console.log('Регистрация SW по пути:', swPath);
+                console.log('Базовый путь:', basePath);
+                
+                const swUrl = swPath + '?v=' + Date.now();
+                
+                navigator.serviceWorker.register(swUrl)
+                    .then(function(reg) {
+                        console.log('✅ Service Worker зарегистрирован:', reg);
+                        
+                        reg.addEventListener('updatefound', () => {
+                            const newWorker = reg.installing;
+                            console.log('🔄 Найдено обновление SW');
+                            
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    console.log('✅ Новая версия SW установлена');
+                                    
+                                    const updatePerformed = localStorage.getItem('update_performed_since_last_sw') === 'true';
+                                    const bannerShown = sessionStorage.getItem('force_update_banner_shown') === 'true';
+                                    
+                                    if (!updatePerformed && !bannerShown) {
                                         if (window.app) {
-                                            window.app.showNotification('Доступна новая версия! Нажмите "Обновить БД"', 'success');
+                                            window.app.showNotification('В базу данных добавлена новая информация! Нажмите "Обновить БД"', 'success');
                                         }
+                                    } else {
+                                        console.log('Уведомление об обновлении пропущено (уже обновлялись)');
                                     }
-                                });
+                                }
                             });
-                        })
-                        .catch(function(err) {
-                            console.error('❌ Ошибка регистрации SW:', err);
                         });
-                });
-            }
-        })();
-    </script>
+                    })
+                    .catch(function(err) {
+                        console.error('❌ Ошибка регистрации SW:', err);
+                    });
+            });
+        }
+    })();
+</script>
 </body>
 </html>

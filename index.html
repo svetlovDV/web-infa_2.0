@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Инфа под рукой 2.0</title>
+    <title>Инфа 2.0</title>
     
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0a0a0a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Инфа под рукой">
+    <meta name="apple-mobile-web-app-title" content="Инфа 2.0">
     <meta name="mobile-web-app-capable" content="yes">
     
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=2.4.5">
@@ -575,6 +575,15 @@
             width: 100%;
             border-bottom: 1px solid var(--border-color);
         }
+        .drawer-item:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .drawer-item:disabled:hover {
+            background: transparent;
+            color: var(--text-primary);
+            padding-left: 20px;
+        }
         .drawer-item:hover {
             background: rgba(0, 240, 255, 0.1);
             color: var(--accent-cyan);
@@ -799,6 +808,96 @@
             background: #4ade80;
             transform: scale(1.02);
         }
+        .update-banner-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .version-badge {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            color: var(--text-muted);
+            font-size: 10px;
+            padding: 4px 8px;
+            border-radius: 8px;
+            z-index: 999;
+            font-family: monospace;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+        }
+
+        .pin-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(8px);
+        }
+        .pin-modal-card {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 30px;
+            width: 90%;
+            max-width: 320px;
+            text-align: center;
+            border: 1px solid var(--accent-cyan);
+            box-shadow: 0 0 40px var(--accent-cyan-glow);
+        }
+        .pin-modal-title {
+            color: var(--accent-cyan);
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .pin-modal-input {
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            color: var(--text-primary);
+            font-size: 24px;
+            text-align: center;
+            letter-spacing: 8px;
+            width: 100%;
+            margin-bottom: 20px;
+            outline: none;
+        }
+        .pin-modal-input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 20px var(--accent-cyan-glow);
+        }
+        .pin-modal-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .pin-modal-btn {
+            padding: 10px 20px;
+            border-radius: 12px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .pin-modal-btn.cancel {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+        .pin-modal-error {
+            color: var(--error-red);
+            font-size: 12px;
+            margin-top: 10px;
+        }
     </style>
 <base target="_blank">
 </head>
@@ -877,7 +976,7 @@
     <div id="drawer" class="drawer">
         <div class="drawer-header">
             <h3>Панель<br>управление</h3>
-            <button id="drawer-close" class="drawer-close">✕</button>
+            <button id="drawer-close" class="drawer-close"></button>
         </div>
         <div id="drawer-menu-main" class="drawer-menu">
             <button id="drawer-refresh" class="drawer-item"><span class="item-icon">🌐</span><span>Обновить БД</span></button>
@@ -894,9 +993,11 @@
     </div>
 
     <div id="notification" class="notification hidden"></div>
+    
+    <div class="version-badge" id="app-version-badge">v2.4.5</div>
 
     <script>
-        const APP_VERSION = '2.4.5';
+        const APP_VERSION = '.30.04.1';
         
         const ACCESS_LEVELS = {
             '83e19a9ce479dc064bab4bd50134db14918cc967debd3ad223bb8993c523788d': {
@@ -944,6 +1045,112 @@
         let PARKING_DATA = [];
 
         let SESSION_DATA = null;
+        class SecurePinStorage {
+            constructor() {
+                this.storageKey = 'encrypted_user_pin';
+                this.salt = this.generateNewSalt();
+            }
+            
+            generateNewSalt() {
+                try {
+                    const salt = CryptoJS.lib.WordArray.random(32);
+                    if (salt && salt.toString()) {
+                        return salt.toString();
+                    }
+                    throw new Error('Salt generation failed');
+                } catch(e) {
+                    console.warn('Ошибка генерации соли, использую fallback');
+                    return CryptoJS.SHA256(Date.now() + navigator.userAgent).toString();
+                }
+            }
+            
+            storeEncryptedPin(enteredPin, userLevel) {
+                try {
+                    const pinData = {
+                        pin: enteredPin,
+                        level: userLevel,
+                        timestamp: Date.now()
+                    };
+                    
+                    const encrypted = CryptoJS.AES.encrypt(
+                        JSON.stringify(pinData),
+                        this.salt
+                    ).toString();
+                    
+                    sessionStorage.setItem(this.storageKey, encrypted);
+                    return true;
+                } catch(e) {
+                    console.error('❌ Ошибка сохранения PIN:', e);
+                    return false;
+                }
+            }
+            
+            retrievePin() {
+                const encrypted = sessionStorage.getItem(this.storageKey);
+                if (!encrypted) {
+                    return null;
+                }
+                
+                try {
+                    const decrypted = CryptoJS.AES.decrypt(encrypted, this.salt);
+                    const pinData = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
+                    
+                    const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 дней
+                    
+                    if (Date.now() - pinData.timestamp > maxAge) {
+                        this.clear();
+                        return null;
+                    }
+                    
+                    const daysLeft = Math.floor((maxAge - (Date.now() - pinData.timestamp)) / (24 * 60 * 60 * 1000));
+                    return pinData.pin;
+                } catch(e) {
+                    console.error('❌ Ошибка расшифровки PIN:', e);
+                    this.clear();
+                    return null;
+                }
+            }
+            
+            getStoredLevel() {
+                const encrypted = sessionStorage.getItem(this.storageKey);
+                if (!encrypted) return null;
+                
+                try {
+                    const decrypted = CryptoJS.AES.decrypt(encrypted, this.salt);
+                    const pinData = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
+                    return pinData.level;
+                } catch(e) {
+                    return null;
+                }
+            }
+            
+            getRemainingDays() {
+                const encrypted = sessionStorage.getItem(this.storageKey);
+                if (!encrypted) return 0;
+                
+                try {
+                    const decrypted = CryptoJS.AES.decrypt(encrypted, this.salt);
+                    const pinData = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
+                    const maxAge = 7 * 24 * 60 * 60 * 1000;
+                    const elapsed = Date.now() - pinData.timestamp;
+                    
+                    if (elapsed >= maxAge) return 0;
+                    
+                    const remaining = maxAge - elapsed;
+                    return Math.ceil(remaining / (24 * 60 * 60 * 1000));
+                } catch(e) {
+                    return 0;
+                }
+            }
+            
+            clear() {
+                sessionStorage.removeItem(this.storageKey);
+            }
+            
+            hasValidPin() {
+                return this.retrievePin() !== null;
+            }
+        }
         
         function verifyAccessCode(inputCode) {
             if (!inputCode) return null;
@@ -997,6 +1204,9 @@
         }
         
         function saveSession(userData) {
+            const pinStorage = new SecurePinStorage();
+            pinStorage.storeEncryptedPin(userData.enteredCode, userData.level);
+            
             const sessionData = {
                 accessCodeHash: CryptoJS.SHA256(userData.enteredCode).toString(),
                 level: userData.level,
@@ -1069,7 +1279,6 @@
                 this.documents = DOCUMENTS_DATA;
                 this.parking = PARKING_DATA;
                 this.isInitialized = true;
-                console.log('DATABASE ready');
             },
 
             calculateMatchPercent(text, query) {
@@ -1200,6 +1409,7 @@
                 this.pinCode = "";
                 this.maxPinLength = 4;
                 this.isRestoredResults = false;
+                this.currentDataVersion = null;
                 this.init();
             }
 
@@ -1216,6 +1426,7 @@
                 this.zoomInBtn = document.getElementById('zoom-in-btn');
                 this.zoomOutBtn = document.getElementById('zoom-out-btn');
                 this.zoomIndicator = document.getElementById('zoom-indicator');
+                this.drawerRefresh = document.getElementById('drawer-refresh');
                 
                 this.pinPad = document.getElementById('pin-pad');
                 this.pinDots = document.getElementById('pin-dots');
@@ -1225,7 +1436,6 @@
                 this.drawerOverlay = document.getElementById('drawer-overlay');
                 this.drawer = document.getElementById('drawer');
                 this.drawerClose = document.getElementById('drawer-close');
-                this.drawerRefresh = document.getElementById('drawer-refresh');
                 this.drawerError = document.getElementById('drawer-error');
                 this.drawerAddData = document.getElementById('drawer-add-data');
                 this.drawerLogout = document.getElementById('drawer-logout');
@@ -1235,6 +1445,8 @@
                 this.drawerAddStation = document.getElementById('drawer-add-station');
                 this.drawerAddParking = document.getElementById('drawer-add-parking');
                 this.drawerAddContact = document.getElementById('drawer-add-contact');
+                
+                this.versionBadge = document.getElementById('app-version-badge');
             }
 
             saveSearchResults(results, query) {
@@ -1412,12 +1624,18 @@
                 this.currentUser = fullUserData;
                 this.isLoggedIn = true;
                 DATABASE.setCurrentUser(fullUserData);
+                
+                const pinStorage = new SecurePinStorage();
+                pinStorage.storeEncryptedPin(this.pinCode, userData.level);
+                
                 saveSession(fullUserData);
                 
                 this.pinCode = "";
                 this.updatePinDots();
                 this.showMainScreen();
-                this.showNotification(`Добро пожаловать, ${fullUserData.greeting}!`, 'success');
+                
+                const remainingDays = pinStorage.getRemainingDays();
+                this.showNotification(`Добро пожаловать, ${fullUserData.greeting}! PIN сохраняется на ${remainingDays} дней`, 'success');
             }
 
             updateZoomIndicator() {
@@ -1557,25 +1775,70 @@
                 this.resetDrawerAutoClose();
             }
 
-            async refreshData() {
+            async requestPinForUpdate() {
+                return new Promise((resolve) => {
+                    const modal = document.createElement('div');
+                    modal.className = 'pin-modal';
+                    modal.innerHTML = `
+                        <div class="pin-modal-card">
+                            <div class="pin-modal-title">Для обновления введите Ваш код доступа</div>
+                            <input type="password" id="pin-modal-input" class="pin-modal-input" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="****" autocomplete="off">
+                            <div class="pin-modal-buttons">
+                                <button id="pin-modal-cancel" class="pin-modal-btn cancel">Отмена</button>
+                            </div>
+                            <div id="pin-modal-error" class="pin-modal-error"></div>
+                        </div>
+                    `;
+                    document.body.appendChild(modal);
+                    
+                    const input = document.getElementById('pin-modal-input');
+                    const cancelBtn = document.getElementById('pin-modal-cancel');
+                    const errorDiv = document.getElementById('pin-modal-error');
+                    
+                    input.focus();
+                    
+                    const cleanup = () => {
+                        modal.remove();
+                    };
+                    
+                    const handleAutoSubmit = () => {
+                        const pin = input.value.trim();
+                        if (pin.length !== 4) return;
+                        
+                        const userData = verifyAccessCode(pin);
+                        if (!userData) {
+                            errorDiv.textContent = 'Неверный код доступа';
+                            input.value = '';
+                            input.focus();
+                            return;
+                        }
+                        cleanup();
+                        resolve(pin);
+                    };
+                    
+                    const handleCancel = () => {
+                        cleanup();
+                        resolve(null);
+                    };
+                    
+                    cancelBtn.addEventListener('click', handleCancel);
+                    input.addEventListener('input', (e) => {
+                        errorDiv.textContent = '';
+                        if (e.target.value.length === 4) {
+                            handleAutoSubmit();
+                        }
+                    });
+                });
+            }
+
+            async executeDataRefresh(userData, pin) {
+                
                 this.showNotification('🌐 Обновление данных...', 'success');
-                
-                this.clearSavedResults();
-                
-                if (!this.currentUser || !this.currentUser.enteredCode) {
-                    this.showNotification('❌ PIN не найден в памяти. Выполните повторный вход.', 'error');
-                    this.handleLogout();
-                    return;
-                }
-                
-                const currentPin = this.currentUser.enteredCode;
-                const currentLevel = this.currentUser.level;
-                
                 this.showLoadingMessage('Обновление данных...');
-                
                 this.loadingScreen.classList.add('active');
                 this.mainScreen.classList.remove('active');
                 
+                this.clearSavedResults();
                 CONTACTS_DATA = [];
                 STATIONS_DATA = [];
                 PARKING_DATA = [];
@@ -1583,19 +1846,18 @@
                 
                 await new Promise(resolve => setTimeout(resolve, 100));
                 
-                const fullUserData = { 
-                    ...this.currentUser, 
-                    enteredCode: currentPin 
-                };
-                
+                const fullUserData = { ...userData, enteredCode: pin };
                 const decryptSuccess = decryptAllDataWithCode(fullUserData);
                 
                 if (!decryptSuccess) {
                     this.loadingScreen.classList.remove('active');
                     this.showMainScreen();
                     this.showNotification('❌ Ошибка расшифровки данных.', 'error');
-                    return;
+                    return false;
                 }
+                
+                const pinStorage = new SecurePinStorage();
+                pinStorage.storeEncryptedPin(pin, userData.level);
                 
                 DATABASE.contacts = CONTACTS_DATA;
                 DATABASE.stations = STATIONS_DATA;
@@ -1608,6 +1870,11 @@
                 this.isLoggedIn = true;
                 DATABASE.setCurrentUser(fullUserData);
                 
+                if (this.currentDataVersion) {
+                    localStorage.setItem('last_updated_version', this.currentDataVersion);
+                    sessionStorage.setItem(`banner_shown_${this.currentDataVersion}`, 'true');
+                }
+                
                 this.loadingScreen.classList.remove('active');
                 this.showMainScreen();
                 
@@ -1619,6 +1886,83 @@
                 }
                 
                 this.showNotification('✅ Данные успешно обновлены!', 'success');
+                return true;
+            }
+
+            async refreshData() {  
+                const pinStorage = new SecurePinStorage();
+                const savedPin = pinStorage.retrievePin();
+                
+                if (!savedPin) {  
+                    const userPin = await this.requestPinForUpdate();
+                    
+                    if (!userPin) {
+                        this.showNotification('Обновление отменено. Введите PIN через главный экран.', 'error');
+                        return false;
+                    }
+                    
+                    const userData = verifyAccessCode(userPin);
+                    if (!userData) {
+                        this.showNotification('Неверный код доступа', 'error');
+                        return false;
+                    }
+                    
+                    pinStorage.storeEncryptedPin(userPin, userData.level);
+                    
+                    return await this.executeDataRefresh(userData, userPin);
+                }
+                
+                const userData = verifyAccessCode(savedPin);
+                if (!userData) {
+                    pinStorage.clear();
+                    this.showNotification('PIN устарел. Выполните повторный вход.', 'error');
+                    this.handleLogout();
+                    return false;
+                }
+                
+                return await this.executeDataRefresh(userData, savedPin);
+            }
+
+            async updateRefreshButtonState() {
+                if (!this.drawerRefresh) return;
+                
+                try {
+                    const registration = await navigator.serviceWorker.getRegistration();
+                    if (!registration || !registration.active) {
+                        if (this.drawerRefresh.disabled) this.drawerRefresh.disabled = false;
+                        return;
+                    }
+                    
+                    const swUrl = registration.active.scriptURL;
+                    const response = await fetch(swUrl + '?t=' + Date.now());
+                    const swContent = await response.text();
+                    
+                    let swVersion = null;
+                    let match = swContent.match(/CACHE_VERSION\s*=\s*['"]([^'"]+)['"]/);
+                    if (match) swVersion = match[1];
+                    
+                    if (!swVersion) {
+                        match = swContent.match(/CACHE_NAME\s*=\s*['"][^'"]*-([^'"]+)['"]/);
+                        if (match) swVersion = match[1];
+                    }
+                    
+                    if (swVersion) {
+                        this.currentDataVersion = swVersion;
+                        const lastUpdated = localStorage.getItem('last_updated_version');
+                        
+                        if (lastUpdated === swVersion) {
+                            this.drawerRefresh.disabled = true;
+                            this.drawerRefresh.style.opacity = '0.5';
+                        } else {
+                            this.drawerRefresh.disabled = false;
+                            this.drawerRefresh.style.opacity = '1';
+                        }
+                    } else {
+                        if (this.drawerRefresh.disabled) this.drawerRefresh.disabled = false;
+                    }
+                } catch(e) {
+                    if (this.drawerRefresh.disabled) this.drawerRefresh.disabled = false;
+                }
             }
 
             showLoadingMessage(msg) {
@@ -1629,6 +1973,10 @@
                 this.isLoggedIn = false;
                 this.currentUser = null;
                 DATABASE.setCurrentUser(null);
+                
+                const pinStorage = new SecurePinStorage();
+                pinStorage.clear();
+                
                 localStorage.removeItem('access_session_data');
                 localStorage.removeItem('access_session_timestamp');
                 sessionStorage.removeItem('access_session_data');
@@ -1664,6 +2012,17 @@
                 
                 this.loadZoomSetting();
                 
+                if (this.versionBadge) {
+                    this.versionBadge.textContent = `v${APP_VERSION}`;
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistration().then(reg => {
+                            if (reg && reg.active) {
+                                this.versionBadge.style.background = 'rgba(0, 240, 255, 0.25)';
+                            }
+                        });
+                    }
+                }
+                
                 if (this.searchInput) {
                     this.searchInput.value = '';
                     setTimeout(() => this.searchInput.focus(), 100);
@@ -1685,15 +2044,34 @@
                 DATABASE.init();
                 ParkingUI.init();
                 
+                this.updateRefreshButtonState();
                 this.showForceUpdateBanner();
             }
             
             showForceUpdateBanner() {
                 if (!FORCE_UPDATE_BANNER) return;
                 
-                if (sessionStorage.getItem('force_update_banner_shown') === 'true') return;
+                if (!this.currentDataVersion) {
+                    this.updateRefreshButtonState().then(() => {
+                        this.checkAndShowBanner();
+                    });
+                } else {
+                    this.checkAndShowBanner();
+                }
+            }
+            
+            async checkAndShowBanner() {
+                if (!this.currentDataVersion) return;
                 
-                if (localStorage.getItem('update_performed_since_last_sw') === 'true') return;
+                const lastUpdated = localStorage.getItem('last_updated_version');
+                
+                if (lastUpdated === this.currentDataVersion) {
+                    return;
+                }
+                
+                if (sessionStorage.getItem(`banner_shown_${this.currentDataVersion}`) === 'true') {
+                    return;
+                }
                 
                 const banner = document.createElement('div');
                 banner.className = 'update-banner';
@@ -1710,8 +2088,15 @@
                 
                 const btn = document.getElementById('force-update-btn');
                 if (btn) {
-                    btn.addEventListener('click', () => {
-                        this.refreshData();
+                    btn.addEventListener('click', async () => {
+                        const originalText = btn.textContent;
+                        btn.textContent = '⏳ Обновление...';
+                        btn.disabled = true;
+                        
+                        await this.refreshData();
+                        
+                        btn.textContent = originalText;
+                        btn.disabled = false;
                         
                         const bannerEl = document.getElementById('force-update-banner');
                         if (bannerEl) {
@@ -1719,8 +2104,7 @@
                             setTimeout(() => bannerEl.remove(), 500);
                         }
                         
-                        sessionStorage.setItem('force_update_banner_shown', 'true');
-                        localStorage.setItem('update_performed_since_last_sw', 'true');
+                        sessionStorage.setItem(`banner_shown_${this.currentDataVersion}`, 'true');
                     });
                 }
             }
@@ -1760,20 +2144,16 @@
                             if (match) currentVersion = match[1];
                         }
                         
-                        if (!currentVersion) {
-                            currentVersion = swContent.substring(0, 100);
-                        }
-                        
-                        const savedVersion = localStorage.getItem('sw_cache_version');
-                        
-                        if (savedVersion !== currentVersion) {
-                            localStorage.setItem('sw_cache_version', currentVersion);
-                            localStorage.removeItem('update_performed_since_last_sw');
-                            sessionStorage.removeItem('force_update_banner_shown');
+                        if (currentVersion) {
+                            this.currentDataVersion = currentVersion;
+                            const savedVersion = localStorage.getItem('sw_cache_version');
+                            
+                            if (savedVersion !== currentVersion) {
+                                localStorage.setItem('sw_cache_version', currentVersion);
+                            }
                         }
                     }
                 } catch(e) {
-                    console.log('Ошибка проверки версии SW:', e);
                 }
             }
 
@@ -1908,19 +2288,17 @@
                         if (item.бск) fields.push(`🔹 БСК: ${item.бск}`);
                         if (item.код) fields.push(`🔹 КОД: ${item.код}`);
                         if (item.дсп) fields.push(`🔻 ДСП: ${item.дсп}`);
+                        if (item.телефон) fields.push(`☎️  ${item.телефон}`);
                         if (item.блокпост) fields.push(`🔻 БЛОК-ПОСТ: ${item.блокпост}`);
                         if (item.туалет) fields.push(`🚾 с/у: ${item.туалет}`);
                         if (item.инфа) fields.push(`💬 ИНФА: ${item.инфа}`);
                         if (item.обновлено) fields.push(`✅ Обновлено: ${item.обновлено}`);
-                        const phone = item.телефон 
-                            ? `<div class="result-contact"><a href="tel:${item.телефон.replace(/[^0-9+]/g,'')}" class="contact-link">📞 ${this.escapeHtml(item.телефон)}</a></div>` 
-                            : '';
                         const stationHtml = this.highlightText(item.станция || item.линия, currentQ, '#ffb347');
                         return `<div class="result-card station">
                             <div class="result-icon">🚇</div>
                             <div class="result-content">
                                 <div class="result-title">${stationHtml} ${item.matchPercent ? `<span class="match-percent">${Math.round(item.matchPercent)}%</span>` : ''}</div>
-                                ${fields.map(f => `<div class="result-detail">${this.formatTextWithLinks(f)}</div>`).join('')}${phone}
+                                ${fields.map(f => `<div class="result-detail">${this.formatTextWithLinks(f)}</div>`).join('')}
                             </div>
                         </div>`;
                     } else if (item.type === 'document') {
@@ -2009,10 +2387,21 @@
                 }
 
                 if (this.drawerRefresh) {
-                    this.drawerRefresh.addEventListener('click', () => {
-                        this.refreshData();
-                        localStorage.setItem('update_performed_since_last_sw', 'true');
-                        sessionStorage.setItem('force_update_banner_shown', 'true');
+                    this.drawerRefresh.addEventListener('click', async () => {
+                        if (this.drawerRefresh.disabled) {
+                            this.showNotification('Нет доступных обновлений', 'error');
+                            return;
+                        }
+                        
+                        const originalText = this.drawerRefresh.innerHTML;
+                        this.drawerRefresh.innerHTML = '<span class="item-icon">⏳</span><span>Обновление...</span>';
+                        this.drawerRefresh.disabled = true;
+                        
+                        await this.refreshData();
+                        
+                        this.drawerRefresh.innerHTML = originalText;
+                        await this.updateRefreshButtonState();
+                        
                         this.closeDrawer();
                     });
                 }
@@ -2061,6 +2450,12 @@
                 });
 
                 this.setupKeyboardHideOnScroll();
+                
+                window.addEventListener('focus', () => {
+                    if (this.isLoggedIn) {
+                        this.updateRefreshButtonState();
+                    }
+                });
             }
 
             setupKeyboardHideOnScroll() {
@@ -2148,33 +2543,19 @@
                 const path = window.location.pathname;
                 const basePath = path.substring(0, path.lastIndexOf('/') + 1);
                 const swPath = basePath + 'sw.js';
-                
-                console.log('Регистрация SW по пути:', swPath);
-                console.log('Базовый путь:', basePath);
-                
                 const swUrl = swPath + '?v=' + Date.now();
                 
                 navigator.serviceWorker.register(swUrl)
                     .then(function(reg) {
-                        console.log('✅ Service Worker зарегистрирован:', reg);
                         
                         reg.addEventListener('updatefound', () => {
                             const newWorker = reg.installing;
-                            console.log('🔄 Найдено обновление SW');
                             
                             newWorker.addEventListener('statechange', () => {
                                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    console.log('✅ Новая версия SW установлена');
                                     
-                                    const updatePerformed = localStorage.getItem('update_performed_since_last_sw') === 'true';
-                                    const bannerShown = sessionStorage.getItem('force_update_banner_shown') === 'true';
-                                    
-                                    if (!updatePerformed && !bannerShown) {
-                                        if (window.app) {
-                                            window.app.showNotification('🔔 В базу данных добавлена новая информация! Нажмите "Обновить БД"', 'success');
-                                        }
-                                    } else {
-                                        console.log('Уведомление об обновлении пропущено (уже обновлялись)');
+                                    if (window.app) {
+                                        window.app.updateRefreshButtonState();
                                     }
                                 }
                             });

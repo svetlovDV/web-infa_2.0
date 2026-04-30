@@ -1,8 +1,6 @@
-
 const basePath = self.location.pathname.replace('sw.js', '');
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v.30.04.1';  // Измените версию при обновлении
 const CACHE_NAME = `infa-cache-${CACHE_VERSION}`;
-
 
 const urlsToCache = [
   basePath,
@@ -15,12 +13,11 @@ const urlsToCache = [
   basePath + 'logo.png'
 ];
 
-
 self.addEventListener('install', event => {
-  console.log('[SW] Installing new version:', CACHE_VERSION);
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
+  
         return Promise.allSettled(
           urlsToCache.map(url => 
             cache.add(url).catch(e => console.warn(`[SW] Failed to cache ${url}:`, e))
@@ -38,7 +35,7 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(event.request)
         .then(response => {
-        
+    
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseToCache);
@@ -71,13 +68,11 @@ self.addEventListener('fetch', event => {
 });
 
 self.addEventListener('activate', event => {
-  console.log('[SW] Activating new version:', CACHE_VERSION);
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(name => {
           if (name !== CACHE_NAME) {
-            console.log('[SW] Deleting old cache:', name);
             return caches.delete(name);
           }
         })

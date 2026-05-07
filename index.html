@@ -20,7 +20,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <script src="data.js?v=30.04.3"></script>
-
     
     <style>
         * {
@@ -378,22 +377,22 @@
             position: relative;
             z-index: 1;
         }
-.sticky-search-wrapper {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: var(--bg-primary);
-    padding-top: 0;
-    margin: 0 -16px;
-    padding-left: 16px;
-    padding-right: 16px;
-}
+        .sticky-search-wrapper {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--bg-primary);
+            padding-top: 0;
+            margin: 0 -16px;
+            padding-left: 16px;
+            padding-right: 16px;
+        }
 
-.search-input {
-    text-align: center;
-    width: 100%;
-    box-sizing: border-box;
-}
+        .search-input {
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
         .header-info {
             display: flex;
             flex-direction: row;
@@ -618,7 +617,7 @@
             margin-bottom: 16px;
             width: 100%;
         }
-            .search-input {
+        .search-input {
             width: 100%;
             background: var(--bg-secondary);
             border: 2px solid var(--accent-cyan);
@@ -780,12 +779,17 @@
             z-index: 10000;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             transform: translateY(120px);
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, opacity 0.3s ease;
             backdrop-filter: blur(10px);
             background: rgba(26, 26, 26, 0.95);
+            opacity: 1;
         }
         .update-banner.show {
             transform: translateY(0);
+        }
+        .update-banner.hiding {
+            transform: translateY(120px);
+            opacity: 0;
         }
         .update-banner-text {
             font-size: 14px;
@@ -824,8 +828,43 @@
             backdrop-filter: blur(4px);
             transition: all 0.3s ease;
         }
+        
+        .manual-update-btn {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            padding: 4px 8px;
+            border-radius: 8px;
+            background: rgba(249, 115, 22, 0.25);
+            border: 1px solid rgba(249, 115, 22, 0.5);
+            color: #f97316;
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+            transition: all 0.3s ease;
+            display: none;
+            animation: fadeInUp 0.4s ease;
+            pointer-events: auto;
+            letter-spacing: 0.3px;
+        }
+        .manual-update-btn:hover {
+            background: rgba(249, 115, 22, 0.4);
+            transform: scale(1.02);
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
 
-        /* Стили для модального окна PIN (как при входе) */
         .pin-modal {
             position: fixed;
             top: 0;
@@ -839,7 +878,7 @@
             align-items: center;
             backdrop-filter: blur(8px);
         }
-         .pin-modal-card {
+        .pin-modal-card {
             background: var(--bg-card);
             border-radius: 20px;
             padding: 20px 18px;
@@ -855,7 +894,7 @@
             margin-bottom: 15px;
             font-weight: 500;
         }
-       .pin-modal-dots {
+        .pin-modal-dots {
             display: flex;
             justify-content: center;
             align-items: center;
@@ -903,7 +942,7 @@
             border-color: var(--accent-cyan);
             box-shadow: 0 0 15px var(--accent-cyan-glow);
         }
-       .pin-modal-btn.empty {
+        .pin-modal-btn.empty {
             visibility: hidden;
             pointer-events: none;
         }
@@ -911,13 +950,13 @@
             font-size: 18px;
             color: var(--text-secondary);
         }
-       .pin-modal-error {
+        .pin-modal-error {
             color: var(--error-red);
             font-size: 11px;
             margin-top: 8px;
             min-height: 28px;
         }
-       .pin-modal-cancel {
+        .pin-modal-cancel {
             background: transparent;
             border: none;
             color: var(--text-secondary);
@@ -928,7 +967,7 @@
             padding: 6px 12px;
         }
     </style>
-<base target="_blank">
+    <base target="_blank">
 </head>
 <body>
     <div id="loading-screen" class="screen active">
@@ -993,7 +1032,7 @@
 
             <div class="sticky-search-wrapper">
                 <div class="search-section">
-                    <input type="text" id="search-input" class="search-input" placeholder="Что будем искать сегодня 🧐" autocomplete="off">
+                    <input type="text" id="search-input" class="search-input" placeholder="Что будем искать сегодня?" autocomplete="off">
                 </div>
             </div>
 
@@ -1023,6 +1062,7 @@
     <div id="notification" class="notification hidden"></div>
     
     <div class="version-badge" id="app-version-badge"></div>
+    <button id="manual-update-btn" class="manual-update-btn">🔔 Есть обновление</button>
 
     <script>
         const ACCESS_LEVELS = {
@@ -1192,7 +1232,7 @@
                 parking: PARKING_DATA,
                 documents: DOCUMENTS_DATA,
                 timestamp: Date.now(),
-                appVersion: APP_VERSION
+                appVersion: typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1.0'
             };
             
             localStorage.setItem('access_session_data', JSON.stringify(sessionData));
@@ -1385,8 +1425,10 @@
                 this.pinCode = "";
                 this.maxPinLength = 4;
                 this.isRestoredResults = false;
-                this.currentDataVersion = null;
+                this.currentDataVersion = (typeof CACHE_VERSION !== 'undefined') ? CACHE_VERSION : null;
                 this.bannerShown = false;
+                this.bannerHiddenBySwipe = false;
+                this.bannerGlobalListenersActive = false; 
                 this.init();
             }
 
@@ -1423,6 +1465,7 @@
                 this.drawerAddContact = document.getElementById('drawer-add-contact');
                 
                 this.versionBadge = document.getElementById('app-version-badge');
+                this.manualUpdateBtn = document.getElementById('manual-update-btn');
             }
 
             saveSearchResults(results, query) {
@@ -1745,13 +1788,11 @@
                 this.resetDrawerAutoClose();
             }
 
-            // НОВОЕ МОДАЛЬНОЕ ОКНО С ПИН-ПАДОМ (как при входе)
             async requestPinForUpdate() {
                 return new Promise((resolve) => {
                     const modal = document.createElement('div');
                     modal.className = 'pin-modal';
                     
-                    // HTML с точками и панелью цифр
                     modal.innerHTML = `
                         <div class="pin-modal-card">
                             <div class="pin-modal-title" style="color: #f97316;">Для обновления введите ваш код доступа</div>
@@ -1776,7 +1817,7 @@
                                 <button class="pin-modal-btn backspace" data-action="backspace">⌫</button>
                             </div>
                             <div id="pin-modal-error" class="pin-modal-error"></div>
-                            <button class="pin-modal-cancel" id="pin-modal-cancel">Отмена</button>
+                            <button class="pin-modal-cancel" id="pin-modal-cancel">Обновить позже</button>
                         </div>
                     `;
                     document.body.appendChild(modal);
@@ -1803,7 +1844,6 @@
                             errorDiv.textContent = '';
                             
                             if (currentPin.length === maxLen) {
-                                // Автоматическая проверка
                                 const userData = verifyAccessCode(currentPin);
                                 if (!userData) {
                                     errorDiv.textContent = 'Неверный код доступа';
@@ -1830,7 +1870,6 @@
                         resolve(null);
                     };
                     
-                    // Обработка кликов по кнопкам
                     pad.querySelectorAll('.pin-modal-btn').forEach(btn => {
                         btn.addEventListener('click', (e) => {
                             e.stopPropagation();
@@ -1846,7 +1885,6 @@
                     
                     cancelBtn.addEventListener('click', handleCancel);
                     
-                    // Физическая клавиатура
                     const keyHandler = (e) => {
                         if (!modal.isConnected) {
                             document.removeEventListener('keydown', keyHandler);
@@ -1864,7 +1902,6 @@
                     };
                     document.addEventListener('keydown', keyHandler);
                     
-                    // Сохраняем ссылку для очистки
                     modal._keyHandler = keyHandler;
                 });
             }
@@ -1912,6 +1949,12 @@
                     sessionStorage.setItem(`banner_shown_${this.currentDataVersion}`, 'true');
                 }
                 
+                this.hideUpdateBanner();
+                this.hideManualUpdateButton();
+                this.bannerShown = false;
+                this.bannerHiddenBySwipe = false;
+                this.removeBannerGlobalListeners();
+                
                 this.loadingScreen.classList.remove('active');
                 this.showMainScreen();
                 
@@ -1935,13 +1978,15 @@
                     const userPin = await this.requestPinForUpdate();
                     
                     if (!userPin) {
-                        this.showNotification('Обновление отменено. Введите PIN через главный экран.', 'error');
+                        this.showNotification('Обновление отменено.', 'error');
+                        this.showManualUpdateButton();
                         return false;
                     }
                     
                     const userData = verifyAccessCode(userPin);
                     if (!userData) {
                         this.showNotification('Неверный код доступа', 'error');
+                        this.showManualUpdateButton();
                         return false;
                     }
                     
@@ -1955,6 +2000,7 @@
                     pinStorage.clear();
                     this.showNotification('Срок действия кода-доступа истёк! Введите код-доступа ещё раз', 'error');
                     this.handleLogout();
+                    this.showManualUpdateButton();
                     return false;
                 }
                 
@@ -1963,9 +2009,9 @@
 
             updateVersionBadgeColor() {
                 if (!this.versionBadge) return;
-                
+                const currentVer = (typeof CACHE_VERSION !== 'undefined') ? CACHE_VERSION : null;
                 const lastUpdated = localStorage.getItem('last_updated_version');
-                if (lastUpdated === CACHE_VERSION) {
+                if (currentVer && lastUpdated === currentVer) {
                     this.versionBadge.style.background = 'rgba(74, 222, 128, 0.25)';
                     this.versionBadge.style.color = '#4ade80';
                     this.versionBadge.style.border = '1px solid rgba(74, 222, 128, 0.5)';
@@ -1975,7 +2021,83 @@
                     this.versionBadge.style.border = '1px solid rgba(248, 113, 113, 0.5)';
                 }
             }
-
+            
+            showManualUpdateButton() {
+                if (!this.manualUpdateBtn) return;
+                if (this.manualUpdateBtn.style.display === 'block') return;
+                
+                this.hideUpdateBanner();
+                this.bannerShown = false;
+                this.removeBannerGlobalListeners();
+                
+                this.manualUpdateBtn.style.display = 'block';
+                this.manualUpdateBtn.style.animation = 'fadeInUp 0.4s ease';
+            }
+            
+            hideManualUpdateButton() {
+                if (!this.manualUpdateBtn) return;
+                this.manualUpdateBtn.style.display = 'none';
+            }
+            
+            hideUpdateBanner() {
+                const banner = document.getElementById('force-update-banner');
+                if (banner) {
+                    banner.classList.add('hiding');
+                    setTimeout(() => {
+                        if (banner && banner.parentNode) banner.remove();
+                    }, 300);
+                }
+            }
+            
+            addBannerGlobalListeners() {
+                if (this.bannerGlobalListenersActive) return;
+                this.bannerGlobalListenersActive = true;
+                
+                this.bannerClickHandler = (e) => {
+                    const banner = document.getElementById('force-update-banner');
+                    if (!banner) {
+                        this.removeBannerGlobalListeners();
+                        return;
+                    }
+                    if (!banner.contains(e.target)) {
+                        this.handleBannerAutoClose();
+                    }
+                };
+                
+                this.bannerScrollHandler = () => {
+                    const banner = document.getElementById('force-update-banner');
+                    if (banner) {
+                        this.handleBannerAutoClose();
+                    } else {
+                        this.removeBannerGlobalListeners();
+                    }
+                };
+                
+                document.addEventListener('click', this.bannerClickHandler);
+                window.addEventListener('scroll', this.bannerScrollHandler);
+                window.addEventListener('touchmove', this.bannerScrollHandler, { passive: true });
+            }
+            
+            removeBannerGlobalListeners() {
+                if (!this.bannerGlobalListenersActive) return;
+                this.bannerGlobalListenersActive = false;
+                if (this.bannerClickHandler) {
+                    document.removeEventListener('click', this.bannerClickHandler);
+                    window.removeEventListener('scroll', this.bannerScrollHandler);
+                    window.removeEventListener('touchmove', this.bannerScrollHandler);
+                }
+            }
+            
+            handleBannerAutoClose() {
+                if (this.bannerHiddenBySwipe) return;
+                this.bannerHiddenBySwipe = true;
+                this.showManualUpdateButton();
+            }
+            
+            handleBannerSwipeClose() {
+                this.handleBannerAutoClose();
+            }
+            
             showLoadingMessage(msg) {
                 if (this.loadingText) this.loadingText.textContent = msg;
             }
@@ -1993,6 +2115,12 @@
                 sessionStorage.removeItem('access_session_data');
                 
                 this.clearSavedResults();
+                
+                this.hideUpdateBanner();
+                this.hideManualUpdateButton();
+                this.bannerShown = false;
+                this.bannerHiddenBySwipe = false;
+                this.removeBannerGlobalListeners();
                 
                 this.pinCode = "";
                 this.updatePinDots();
@@ -2012,6 +2140,10 @@
                 }
             }
 
+            isMobileDevice() {
+                return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            }
+
             showMainScreen() {
                 this.loadingScreen.classList.remove('active');
                 this.loginScreen.classList.remove('active');
@@ -2024,13 +2156,15 @@
                 this.loadZoomSetting();
                 
                 if (this.versionBadge) {
-                    this.versionBadge.textContent = CACHE_VERSION;
+                    this.versionBadge.textContent = (typeof CACHE_VERSION !== 'undefined') ? CACHE_VERSION : '?';
                     this.updateVersionBadgeColor();
                 }
                 
                 if (this.searchInput) {
                     this.searchInput.value = '';
-                    setTimeout(() => this.searchInput.focus(), 100);
+                    if (!this.isMobileDevice()) {
+                        setTimeout(() => this.searchInput.focus(), 100);
+                    }
                 }
                 
                 if (this.resultsContainer) {
@@ -2055,16 +2189,9 @@
             showForceUpdateBanner() {
                 if (!FORCE_UPDATE_BANNER) return;
                 if (this.bannerShown) return;
+                if (this.bannerHiddenBySwipe) return;
+                if (!this.isLoggedIn) return;
                 
-                if (!this.currentDataVersion) {
-                    setTimeout(() => this.checkAndShowBanner(), 500);
-                } else {
-                    this.checkAndShowBanner();
-                }
-            }
-            
-            async checkAndShowBanner() {
-                if (this.bannerShown) return;
                 if (!this.currentDataVersion) {
                     if (typeof CACHE_VERSION !== 'undefined') {
                         this.currentDataVersion = CACHE_VERSION;
@@ -2083,9 +2210,24 @@
                     return;
                 }
                 
-                if (document.getElementById('force-update-banner')) {
-                    return;
+                this.showUpdateBanner();
+            }
+            
+            showUpdateBanner() {
+                if (this.bannerShown) return;
+                if (!this.isLoggedIn) return;
+                if (!FORCE_UPDATE_BANNER) return;
+                if (!this.currentDataVersion) {
+                    if (typeof CACHE_VERSION !== 'undefined') {
+                        this.currentDataVersion = CACHE_VERSION;
+                    } else {
+                        return;
+                    }
                 }
+                const lastUpdated = localStorage.getItem('last_updated_version');
+                if (lastUpdated === this.currentDataVersion) return;
+                if (sessionStorage.getItem(`banner_shown_${this.currentDataVersion}`) === 'true') return;
+                if (document.getElementById('force-update-banner')) return;
                 
                 this.bannerShown = true;
                 
@@ -2102,6 +2244,21 @@
                 
                 setTimeout(() => banner.classList.add('show'), 100);
                 
+                this.addBannerGlobalListeners();
+                
+                let startY = 0;
+                banner.addEventListener('touchstart', (e) => {
+                    startY = e.touches[0].clientY;
+                }, { passive: true });
+                banner.addEventListener('touchmove', (e) => {
+                    if (!startY) return;
+                    const deltaY = e.touches[0].clientY - startY;
+                    if (deltaY > 50) {
+                        e.preventDefault();
+                        this.handleBannerSwipeClose();
+                    }
+                }, { passive: false });
+                
                 const btn = document.getElementById('force-update-btn');
                 if (btn) {
                     btn.addEventListener('click', async (e) => {
@@ -2116,65 +2273,8 @@
                         
                         btn.textContent = originalText;
                         btn.disabled = false;
-                        
-                        const bannerEl = document.getElementById('force-update-banner');
-                        if (bannerEl) {
-                            bannerEl.classList.remove('show');
-                            setTimeout(() => bannerEl.remove(), 500);
-                        }
-                        
-                        sessionStorage.setItem(`banner_shown_${this.currentDataVersion}`, 'true');
-                        this.updateVersionBadgeColor();
-                        this.bannerShown = false;
                     });
                 }
-            }
-
-            startLoading() {
-                const restoredUser = restoreSessionFromStorage();
-                
-                if (restoredUser && isSessionValid()) {
-                    this.currentUser = restoredUser;
-                    this.isLoggedIn = true;
-                    DATABASE.setCurrentUser(restoredUser);
-                    this.showMainScreen();
-                    this.showNotification('✅ Всё готово, можно продолжать поиск', 'success');
-                } else {
-                    this.showLoginScreen();
-                }
-                
-                this.checkSWVersionAndResetFlag();
-            }
-            
-            async checkSWVersionAndResetFlag() {
-                if (!('serviceWorker' in navigator)) return;
-                
-                try {
-                    const registration = await navigator.serviceWorker.getRegistration();
-                    if (registration && registration.active) {
-                        const swUrl = registration.active.scriptURL;
-                        const response = await fetch(swUrl + '?t=' + Date.now());
-                        const swContent = await response.text();
-                        
-                        let currentVersion = null;
-                        let match = swContent.match(/CACHE_VERSION\s*=\s*['"]([^'"]+)['"]/);
-                        if (match) currentVersion = match[1];
-                        
-                        if (!currentVersion) {
-                            match = swContent.match(/CACHE_NAME\s*=\s*['"][^'"]*-([^'"]+)['"]/);
-                            if (match) currentVersion = match[1];
-                        }
-                        
-                        if (currentVersion) {
-                            this.currentDataVersion = currentVersion;
-                            const savedVersion = localStorage.getItem('sw_cache_version');
-                            
-                            if (savedVersion !== currentVersion) {
-                                localStorage.setItem('sw_cache_version', currentVersion);
-                            }
-                        }
-                    }
-                } catch(e) {}
             }
 
             liveSearch() {
@@ -2443,6 +2543,12 @@
                     });
                 }
 
+                if (this.manualUpdateBtn) {
+                    this.manualUpdateBtn.addEventListener('click', async () => {
+                        await this.refreshData();
+                    });
+                }
+
                 document.addEventListener('click', (e) => {
                     if (this.drawer && this.drawer.classList.contains('active') && 
                         !this.drawer.contains(e.target) && !this.menuBtn.contains(e.target)) {
@@ -2516,6 +2622,53 @@
                 }
             }
 
+            startLoading() {
+                const restoredUser = restoreSessionFromStorage();
+                
+                if (restoredUser && isSessionValid()) {
+                    this.currentUser = restoredUser;
+                    this.isLoggedIn = true;
+                    DATABASE.setCurrentUser(restoredUser);
+                    this.showMainScreen();
+                    this.showNotification('✅ Всё готово, можно продолжать поиск', 'success');
+                } else {
+                    this.showLoginScreen();
+                }
+                
+                this.checkSWVersionAndResetFlag();
+            }
+            
+            async checkSWVersionAndResetFlag() {
+                if (!('serviceWorker' in navigator)) return;
+                
+                try {
+                    const registration = await navigator.serviceWorker.getRegistration();
+                    if (registration && registration.active) {
+                        const swUrl = registration.active.scriptURL;
+                        const response = await fetch(swUrl + '?t=' + Date.now());
+                        const swContent = await response.text();
+                        
+                        let currentVersion = null;
+                        let match = swContent.match(/CACHE_VERSION\s*=\s*['"]([^'"]+)['"]/);
+                        if (match) currentVersion = match[1];
+                        
+                        if (!currentVersion) {
+                            match = swContent.match(/CACHE_NAME\s*=\s*['"][^'"]*-([^'"]+)['"]/);
+                            if (match) currentVersion = match[1];
+                        }
+                        
+                        if (currentVersion) {
+                            this.currentDataVersion = currentVersion;
+                            const savedVersion = localStorage.getItem('sw_cache_version');
+                            
+                            if (savedVersion !== currentVersion) {
+                                localStorage.setItem('sw_cache_version', currentVersion);
+                            }
+                        }
+                    }
+                } catch(e) {}
+            }
+
             init() {
                 this.cacheElements();
                 this.initPinPad();
@@ -2530,32 +2683,32 @@
         });
     </script>
 
-<script>
-    (function() {
-        if ('serviceWorker' in navigator && location.protocol === 'https:') {
-            window.addEventListener('load', function() {
-                const path = window.location.pathname;
-                const basePath = path.substring(0, path.lastIndexOf('/') + 1);
-                const swPath = basePath + 'sw.js';
-                const swUrl = swPath + '?v=' + Date.now();
-                
-                navigator.serviceWorker.register(swUrl)
-                    .then(function(reg) {
-                        reg.addEventListener('updatefound', () => {
-                            const newWorker = reg.installing;
-                            newWorker.addEventListener('statechange', () => {
-                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    if (window.app) {
-                                        setTimeout(() => window.app.checkAndShowBanner(), 1000);
+    <script>
+        (function() {
+            if ('serviceWorker' in navigator && location.protocol === 'https:') {
+                window.addEventListener('load', function() {
+                    const path = window.location.pathname;
+                    const basePath = path.substring(0, path.lastIndexOf('/') + 1);
+                    const swPath = basePath + 'sw.js';
+                    const swUrl = swPath + '?v=' + Date.now();
+                    
+                    navigator.serviceWorker.register(swUrl)
+                        .then(function(reg) {
+                            reg.addEventListener('updatefound', () => {
+                                const newWorker = reg.installing;
+                                newWorker.addEventListener('statechange', () => {
+                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                        if (window.app) {
+                                            setTimeout(() => window.app.checkAndShowBanner(), 1000);
+                                        }
                                     }
-                                }
+                                });
                             });
-                        });
-                    })
-                    .catch(function(err) {});
-            });
-        }
-    })();
-</script>
+                        })
+                        .catch(function(err) {});
+                });
+            }
+        })();
+    </script>
 </body>
 </html>
